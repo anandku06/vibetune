@@ -4,9 +4,19 @@ from discord.ext import commands
 from discord import app_commands
 from dotenv import load_dotenv
 import yt_dlp
+import asyncio
 
 load_dotenv()
 TOKEN = os.getenv('DISCORD_TOKEN')
+GUILD = os.getenv('TEST_GUILD_ID')
+
+async def search_ytdlp_async(query, ydl_opts):
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(None, lambda: _extract(query, ydl_opts))
+
+def _extract(query, ydl_opts):
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        return ydl.extract_info(query, download=False)
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -15,10 +25,11 @@ bot = commands.Bot(command_prefix='!', intents=intents)
 
 @bot.event
 async def on_ready():
-    await bot.tree.sync()
+    test_guild = discord.Object(id=GUILD)
+    await bot.tree.sync(guild=test_guild)
     print(f"{bot.user} has connected to Discord!")
 
-@bot.tree.command(name="play", desription="Play a song or add it to the queue")
+@bot.tree.command(name="play", description="Play a song or add it to the queue")
 @app_commands.describe(song_query="Search query")
 async def play(interaction: discord.Interaction, song_query: str):
     await interaction.response.defer()
@@ -42,5 +53,24 @@ async def play(interaction: discord.Interaction, song_query: str):
     }
 
     query = "ytsearch1: " + song_query
+    result = await search_ytdlp_async(query, ydl_opts)
+    tracks = result.get('entries', [])
+
+    if tracks is None:
+        await interaction.followup.send("No songs found")
+        return
+
+    first_track = tracks[0]
+    audio_url = first_track['url']
+    title = first_track['title', "Untitled"]
+
+    ffmpeg_opts = {
+        "before_options" : "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
+        "options": "-vn -c:a libopus -b:a 96k",
+    }
+
+    source = discord.FFmpegOpusAudio(audio_url, **ffmpeg_opts, executable="bin\\ffmpeg\\ffmpeg.exe")
+
+    voice_client.play(source)
 
 bot.run(TOKEN)
