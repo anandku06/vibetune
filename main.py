@@ -62,7 +62,7 @@ async def play(interaction: discord.Interaction, song_query: str):
 
     first_track = tracks[0]
     audio_url = first_track['url']
-    title = first_track['title', "Untitled"]
+    title = first_track.get('title', "Untitled")
 
     ffmpeg_opts = {
         "before_options" : "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
