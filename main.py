@@ -5,10 +5,13 @@ from discord import app_commands
 from dotenv import load_dotenv
 import yt_dlp
 import asyncio
+from collections import deque
 
 load_dotenv()
 TOKEN = os.getenv('DISCORD_TOKEN')
 GUILD = os.getenv('TEST_GUILD_ID')
+
+SONG_QUEUES = {}
 
 async def search_ytdlp_async(query, ydl_opts):
     loop = asyncio.get_running_loop()
@@ -64,13 +67,40 @@ async def play(interaction: discord.Interaction, song_query: str):
     audio_url = first_track['url']
     title = first_track.get('title', "Untitled")
 
-    ffmpeg_opts = {
-        "before_options" : "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
-        "options": "-vn -c:a libopus -b:a 96k",
-    }
+    guild_id = str(interaction.guild_id)
+    if SONG_QUEUES.get(guild_id) is None:
+       SONG_QUEUES[guild_id] = deque()
 
-    source = discord.FFmpegOpusAudio(audio_url, **ffmpeg_opts, executable="bin\\ffmpeg\\ffmpeg.exe")
+    SONG_QUEUES[guild_id].append((audio_url, title))
 
-    voice_client.play(source)
+    if voice_client.is_playing() or voice_client.is_paused():
+        await interaction.followup.send(f"Added to the queue: **{title}**")
+    else:
+        await interaction.followup.send(f"Now playing: **{title}**")
+        await play_next_song(voice_client, guild_id, interaction.channel)
+
+async def play_next_song(voice_client, guild_id, channel):
+    if SONG_QUEUES[guild_id]:
+        audio_url, title = SONG_QUEUES[guild_id].popleft()
+
+        ffmpeg_opts = {
+            "before_options": "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
+            "options": "-vn -c:a libopus -b:a 96k",
+        }
+
+        source = discord.FFmpegOpusAudio(audio_url, **ffmpeg_opts, executable="bin\\ffmpeg\\ffmpeg.exe")
+
+        def after_play(error):
+            if error:
+                print(f"Error playing {title}: {error}")
+
+            asyncio.run_coroutine_threadsafe(play_next_song(voice_client, guild_id, channel), bot.loop)
+
+        voice_client.play(source, after=after_play)
+        asyncio.create_task(channel.send(f"Now playing: **{title}**"))
+
+    else:
+        await voice_client.disconnect()
+        SONG_QUEUES[guild_id] = deque()
 
 bot.run(TOKEN)
