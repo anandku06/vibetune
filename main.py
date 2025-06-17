@@ -79,6 +79,63 @@ async def play(interaction: discord.Interaction, song_query: str):
         await interaction.followup.send(f"Now playing: **{title}**")
         await play_next_song(voice_client, guild_id, interaction.channel)
 
+@bot.tree.command(name="skip", description="Skips the current song")
+async def skip(interaction: discord.Interaction):
+    if interaction.guild.voice_client and (interaction.guild.voice_client.is_playing() or interaction.guild.voice_client.is_paused()):
+        interaction.guild.voice_client.stop()
+        await interaction.response.send_message("Skipping...")
+    else:
+        await interaction.response.send_message("Not playing anything to skip!")
+
+@bot.tree.command(name="pause", description="Pauses the current playing song")
+async def pause(interaction: discord.Interaction):
+    voice_client = interaction.guild.voice_client
+
+    if voice_client is None:
+        return await interaction.response.send_message("I'm not in a voice channel")
+
+    if not voice_client.is_playing():
+        return await interaction.response.send_message("Nothing is playing currently")
+
+    voice_client.pause()
+    await interaction.response.send_message("Paused")
+    return None
+
+@bot.tree.command(name="resume", description="Resumes the current playing song")
+async def resume(interaction: discord.Interaction):
+    voice_client = interaction.guild.voice_client
+
+    if voice_client is None:
+        return await interaction.response.send_message("I'm not in a voice channel")
+
+    if not voice_client.is_paused():
+        return await interaction.response.send_message("I'm not paused right now")
+
+    voice_client.resume()
+    await interaction.response.send_message("Resumed")
+    return None
+
+@bot.tree.command(name="stop", description="Stops the current playing song")
+async def stop(interaction: discord.Interaction):
+    await interaction.response.defer()
+    voice_client = interaction.guild.voice_client
+
+    if not voice_client or not voice_client.is_connected():
+        await interaction.followup.send("I'm not connected to any voice channel")
+        return None
+
+    guild_id = str(interaction.guild_id)
+    if guild_id in SONG_QUEUES:
+        SONG_QUEUES[guild_id].clear()
+
+    if voice_client.is_playing() or voice_client.is_paused():
+        voice_client.stop()
+
+    await interaction.followup.send("Stopped the playback and disconnected")
+
+    await voice_client.disconnect()
+    return None
+
 async def play_next_song(voice_client, guild_id, channel):
     if SONG_QUEUES[guild_id]:
         audio_url, title = SONG_QUEUES[guild_id].popleft()
