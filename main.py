@@ -9,7 +9,6 @@ from collections import deque
 
 load_dotenv()
 TOKEN = os.getenv('DISCORD_TOKEN')
-GUILD = os.getenv('TEST_GUILD_ID')
 
 SONG_QUEUES = {}
 
@@ -28,8 +27,7 @@ bot = commands.Bot(command_prefix='!', intents=intents)
 
 @bot.event
 async def on_ready():
-    test_guild = discord.Object(id=GUILD)
-    await bot.tree.sync(guild=test_guild)
+    await bot.tree.sync()
     print(f"{bot.user} has connected to Discord!")
 
 @bot.tree.command(name="play", description="Play a song or add it to the queue")
@@ -76,7 +74,7 @@ async def play(interaction: discord.Interaction, song_query: str):
     if voice_client.is_playing() or voice_client.is_paused():
         await interaction.followup.send(f"Added to the queue: **{title}**")
     else:
-        await interaction.followup.send(f"Now playing: **{title}**")
+        await interaction.edit_original_response(content=f"Now playing: **{title}**")
         await play_next_song(voice_client, guild_id, interaction.channel)
 
 @bot.tree.command(name="skip", description="Skips the current song")
@@ -154,7 +152,6 @@ async def play_next_song(voice_client, guild_id, channel):
             asyncio.run_coroutine_threadsafe(play_next_song(voice_client, guild_id, channel), bot.loop)
 
         voice_client.play(source, after=after_play)
-        asyncio.create_task(channel.send(f"Now playing: **{title}**"))
 
     else:
         await voice_client.disconnect()
