@@ -6,9 +6,11 @@ from dotenv import load_dotenv
 import yt_dlp
 import asyncio
 from collections import deque
+from keep_alive import keep_alive
 
 load_dotenv()
 TOKEN = os.getenv('DISCORD_TOKEN')
+keep_alive()
 
 SONG_QUEUES = {}
 
@@ -81,7 +83,7 @@ async def play(interaction: discord.Interaction, song_query: str):
 async def skip(interaction: discord.Interaction):
     if interaction.guild.voice_client and (interaction.guild.voice_client.is_playing() or interaction.guild.voice_client.is_paused()):
         interaction.guild.voice_client.stop()
-        await interaction.response.send_message("Skipping...")
+        await interaction.response.send_message("Skipped to the next song!!")
     else:
         await interaction.response.send_message("Not playing anything to skip!")
 
