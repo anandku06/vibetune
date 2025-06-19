@@ -53,7 +53,9 @@ async def play(interaction: discord.Interaction, song_query: str):
         "noplaylist": True,
         "youtube_include_dash_manifest": False,
         "youtube_include_hls_manifest": False,
-        "cookies" : "./cookies.txt"
+        "cookies" : os.path.join(os.getcwd(), 'cookies.txt'),
+        "quiet" : True,
+        "no_warnings" : True,
     }
 
     query = "ytsearch1: " + song_query
@@ -65,14 +67,14 @@ async def play(interaction: discord.Interaction, song_query: str):
         return
 
     first_track = tracks[0]
-    audio_url = first_track['url']
+    webpage_url = first_track['webpage_url']
     title = first_track.get('title', "Untitled")
 
     guild_id = str(interaction.guild_id)
     if SONG_QUEUES.get(guild_id) is None:
        SONG_QUEUES[guild_id] = deque()
 
-    SONG_QUEUES[guild_id].append((audio_url, title))
+    SONG_QUEUES[guild_id].append((webpage_url, title))
 
     if voice_client.is_playing() or voice_client.is_paused():
         await interaction.followup.send(f"Added to the queue: **{title}**")
@@ -138,26 +140,42 @@ async def stop(interaction: discord.Interaction):
     return None
 
 async def play_next_song(voice_client, guild_id, channel):
-    if SONG_QUEUES[guild_id]:
-        audio_url, title = SONG_QUEUES[guild_id].popleft()
-
-        ffmpeg_opts = {
-            "before_options": "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
-            "options": "-vn -c:a libopus -b:a 96k",
-        }
-
-        source = discord.FFmpegOpusAudio(audio_url, **ffmpeg_opts, executable="bin\\ffmpeg\\ffmpeg.exe")
-
-        def after_play(error):
-            if error:
-                print(f"Error playing {title}: {error}")
-
-            asyncio.run_coroutine_threadsafe(play_next_song(voice_client, guild_id, channel), bot.loop)
-
-        voice_client.play(source, after=after_play)
-
-    else:
+    if not SONG_QUEUES[guild_id]:
         await voice_client.disconnect()
         SONG_QUEUES[guild_id] = deque()
+        return
+
+    webpage_url, title = SONG_QUEUES[guild_id].popleft()
+
+    ydl_opts = {
+        'format': 'bestaudio[abr<=96]/bestaudio',
+        "noplaylist": True,
+        "cookies": "./cookies.txt"
+    }
+
+    loop = asyncio.get_running_loop()
+    result = await loop.run_in_executor(None, lambda: _extract(webpage_url, ydl_opts))
+
+    if not result:
+        await channel.send(f"Failed to fetch audio for **{title}**. Skipping.")
+        await play_next_song(voice_client, guild_id, channel)
+        return
+
+    audio_url = result['url']
+
+    ffmpeg_opts = {
+        "before_options": "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
+        "options": "-vn -c:a libopus -b:a 96k",
+    }
+
+    source = discord.FFmpegOpusAudio(audio_url, **ffmpeg_opts, executable="bin\\ffmpeg\\ffmpeg.exe")
+
+    def after_play(error):
+        if error:
+            print(f"Error playing {title}: {error}")
+        asyncio.run_coroutine_threadsafe(play_next_song(voice_client, guild_id, channel), bot.loop)
+
+    voice_client.play(source, after=after_play)
+    await channel.send(f"Now playing: **{title}**")
 
 bot.run(TOKEN)
