@@ -150,7 +150,7 @@ async def play_next_song(voice_client, guild_id, channel):
     ydl_opts = {
         'format': 'bestaudio[abr<=96]/bestaudio',
         "noplaylist": True,
-        "cookies": "./cookies.txt"
+        "cookies": os.path.join(os.getcwd(), 'cookies.txt')
     }
 
     loop = asyncio.get_running_loop()
